@@ -10,6 +10,8 @@ fi
 
 if [[ "$2" == "" ]]; then
     target_file="$(date +%F_%H-%M-%S)"
+else
+    target_file="$2"
 fi
 
 

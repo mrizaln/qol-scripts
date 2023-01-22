@@ -1,17 +1,16 @@
 #!/usr/bin/env bash
 
-BUILT_IN_HEIGHT=768
-BUILT_IN_WIDTH=1366
-
 run_vnc ()
 {
-    width=$1
-    height=$2
-    offset=$3
+    local width=$1
+    local height=$2
+    local offset=$3
 
-    echo -e "\nstarting vnc at ${width}x${height}${offset}"
+    local dimension=$(xdpyinfo | grep dimension | tr -s ' ' | cut -d\  -f3)
+    echo -e "\nstarting vnc at ${dimension}"
 
-    x11vnc -clip "${width}x${height}${offset}" -repeat -passwd password #-unixpw #-vencrypt nodh:only -ssl
+    # x11vnc -clip "${width}x${height}${offset}" -repeat -passwd password #-unixpw #-vencrypt nodh:only -ssl
+    x11vnc -clip 1920x1080+0+0 -repeat -passwd password
 }
 
-run_vnc BUILT_IN_WIDTH BUILT_IN_HEIGHT
+run_vnc

@@ -11,8 +11,8 @@ content="$2"
 # copy content of a text file
 copy_content()
 {
-    file="$1"
-    target_type="$2"
+    local file="$1"
+    local target_type="$2"
     cat "$file" | xclip -r -sel clip
 
     echo "$target_type"
@@ -23,12 +23,12 @@ copy_content()
 ### workaround for jpeg
 copy_jpeg()
 {
-    file="$1"
-    target_type="$2"
+    local file="$1"
+    local target_type="$2"
 
-    temp_file="/tmp/$(date +%F_%H-%M-%S).png"
+    local temp_file="/tmp/$(date +%F_%H-%M-%S).png"
     convert "$file" "$temp_file"        # convert jpeg file into png file in /tmp
-    target="image/png"
+    local target="image/png"
 
     xclip -sel clip -target "$target_type" < "$file"
 
@@ -41,7 +41,7 @@ copy_jpeg()
 
 
 if [[ "$1" == "" ]]; then
-    echo "usage: $0 <file> [content]"
+    echo "usage: $0 <file> [--content]"
 elif [[ "$1" == "-" ]]; then
     echo "$stdin_data" | xclip -sel clip -target "text/plain"
 elif [[ ! ("$content" == "") && (("$target" == "text/plain") || ("$target" =~ "text/x-")) ]]; then

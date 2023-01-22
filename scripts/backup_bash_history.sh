@@ -36,7 +36,7 @@ backup()
 
 restore()
 {
-    file="$1"
+    local file="$1"
     if [ -z "$file" ]; then
         file=$(ls $BACKUP_DIR/.bash_history.* -rt1 | tail -n1)
     fi
@@ -46,6 +46,7 @@ restore()
     fi
 
     echo "Source file: $file"
+    local ans
     read -p "Are you sure you want to restore your bash history? [y/N] " ans
 
     case $ans in

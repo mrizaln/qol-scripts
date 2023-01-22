@@ -1,16 +1,16 @@
 #!/bin/env bash
 
-BUILT_IN_HEIGHT=768
-BUILT_IN_WIDTH=1366
+dimension=$(xdpyinfo | grep dimension | tr -s ' ' | cut -d\  -f3)
+read BUILT_IN_HEIGHT BUILT_IN_WIDTH < <(echo ${dimension/x/ })
 
 generate_mode ()
 {
-    width=$1
-    height=$2
-    refresh_rate=$3
+    local width=$1
+    local height=$2
+    local refresh_rate=$3
 
-    mode=($(cvt $width $height $refresh_rate | tail -n1 | cut -d\  -f2-))
-    mode_identifier=${mode[0]//\"/}                                             # remove double quotation marks
+    local mode=($(cvt $width $height $refresh_rate | tail -n1 | cut -d\  -f2-))
+    local mode_identifier=${mode[0]//\"/}                                             # remove double quotation marks
     mode=${mode[@]//\"/}
 
     echo -e "\ngenerating mode: ${mode_identifier} ..."
@@ -22,8 +22,8 @@ generate_mode ()
 
 activate_mode ()
 {
-    mode=$1
-    position=$2
+    local mode=$1
+    local position=$2
 
     echo -e "\nactivating mode"
 
@@ -33,7 +33,7 @@ activate_mode ()
 
 delete_mode ()
 {
-    mode_identifier=$1
+    local mode_identifier=$1
 
     echo -e "\ndeleting mode: ${mode_identifier} ..."
 
@@ -45,8 +45,8 @@ delete_mode ()
 
 adb_reverse_connection ()
 {
-    device="$1"
-    port="5900"     # default vnc port
+    local device="$1"
+    local port="5900"     # default vnc port
     if [[ "$2" != "" && "$2" =~ ^[0-9]+$ ]]; then port="$2"; fi
     adb connect $device
     adb reverse tcp:"$port" tcp:"$port"
@@ -55,9 +55,9 @@ adb_reverse_connection ()
 
 run_vnc ()
 {
-    width=$1
-    height=$2
-    offset=$3
+    local width=$1
+    local height=$2
+    local offset=$3
 
     echo -e "\nstarting vnc at ${width}x${height}${offset}"
 
@@ -80,7 +80,7 @@ run_polybar ()
 
 main ()
 {
-    res="$1"
+    local res="$1"
     while true; do
         case "$res" in
             '720')
@@ -116,8 +116,8 @@ main ()
         esac
     done
 
-    pos="$2"
-    offset=""
+    local pos="$2"
+    local offset=""
     while true; do
         case "$pos" in
             "--above")
@@ -145,20 +145,20 @@ main ()
         esac
     done
 
-    connect_method="$3"
+    local connect_method="$3"
     if [[ "$connect_method" = "" ]]; then
         read -p "what connection method to use? (wlan/usb/hdmi) " connect_method
     fi
 
-    use_vnc=true
+    local use_vnc=true
 
     if [[ "$connect_method" = "usb" ]]; then
-        devices=$(adb devices | tail -n+2 | awk -F ' ' '{print $1}')
+        local devices=$(adb devices | tail -n+2 | awk -F ' ' '{print $1}')
         echo "$devices" | cat -n
         devices=($devices)
         read -p "choose device: " num
-        num=$((num - 1))
-        device="${devices[$num]}"
+        local num=$((num - 1))
+        local device="${devices[$num]}"
 
         adb_reverse_connection "$device"
 
@@ -166,7 +166,7 @@ main ()
         use_vnc=false
     fi
 
-    frame_rate=60
+    local frame_rate=60
 
     generate_mode $width $height $frame_rate
     activate_mode "$mode_identifier" "$pos"

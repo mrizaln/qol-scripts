@@ -68,7 +68,7 @@ main()
         while true; do
             local idx=$(( 1 + RANDOM % ${#files_list[@]}))      # $RANDOM is a feature of bash
             file="${files_list[idx]}"
-            
+
             local width; local height
             read width height < <(identify -format "%w %h\n" "$file")   # identify resolution
             local threshold_aspect_ratio="1.3"
@@ -81,6 +81,7 @@ main()
     fi
 
     # check file path is absolute
+    local absolute
     for s in "/" "~"; do
         if [[ $s != ${1:0:1} ]]; then
             absolute=0

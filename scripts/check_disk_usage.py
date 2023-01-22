@@ -5,14 +5,13 @@ import shutil
 import subprocess
 
 MIN_TERMINAL_WIDTH: int = 80
-ROOT_RESERVED = 0.05            # see: https://askubuntu.com/questions/249387/df-h-used-space-avail-free-space-is-less-than-the-total-size-of-home
+ROOT_RESERVED: float = 0.05     # see: https://askubuntu.com/questions/249387/df-h-used-space-avail-free-space-is-less-than-the-total-size-of-home
                                 # see: https://unix.stackexchange.com/questions/7950/reserved-space-for-root-on-a-filesystem-why
+NAME_MAX_LEN: int = 10
+PATH_MAX_LEN: int = 25
 
 
 class Partition:
-    NAME_MAX_LEN = 10
-    PATH_MAX_LEN = 25
-
     # size and usedSize is in bytes
     def __init__(self, name: str = "", path: str = "", size: int = 0, usedSize: int = 0) -> None:
         self.name: str = name
@@ -33,7 +32,7 @@ class Partition:
         except:
             progress = 0
 
-        width = terminalWidth - self.PATH_MAX_LEN - self.NAME_MAX_LEN - 40
+        width = terminalWidth - PATH_MAX_LEN - NAME_MAX_LEN - 35
 
         free = self.size - self.usedSize
         free = f"{formatBytes(free):>6} free"
@@ -54,9 +53,9 @@ class Partition:
             part_char = ""
         bar = "▇" * whole_width + part_char + "▁" * (width - whole_width - 1) if terminalWidth >= MIN_TERMINAL_WIDTH else '-'
 
-        name: str = self.name if len(self.name) <= self.NAME_MAX_LEN else self.name[:self.NAME_MAX_LEN-1] + "…"
-        path: str = self.path if len(self.path) <= self.PATH_MAX_LEN else self.path[:self.PATH_MAX_LEN-1] + "…"
-        line = f"{name:<{self.NAME_MAX_LEN}}  {path:<{self.PATH_MAX_LEN}}  {usedPercentage}% of {size} {bar} {free}"
+        name: str = self.name if len(self.name) <= NAME_MAX_LEN else self.name[:NAME_MAX_LEN-1] + "…"
+        path: str = self.path if len(self.path) <= PATH_MAX_LEN else self.path[:PATH_MAX_LEN-1] + "…"
+        line = f"{name:<{NAME_MAX_LEN}}  {path:<{PATH_MAX_LEN}}  {usedPercentage}% of {size} {bar} {free}"
         print(line)
 
 
@@ -106,7 +105,7 @@ def main():
     parts = []
     longestNameLength = 0
     longestPathLength = 0
-    for n, line in enumerate(lines):
+    for line in lines:
         line = line.split()
         #                name     path     size          used size
         part = Partition(line[0], line[5], int(line[1]), int(line[2]))
@@ -114,12 +113,15 @@ def main():
         longestNameLength = len(part.name) if len(part.name) > longestNameLength else longestNameLength
         longestPathLength = len(part.path) if len(part.path) > longestPathLength else longestPathLength
 
+    global NAME_MAX_LEN
+    global PATH_MAX_LEN
+
     if terminalWidth <= MIN_TERMINAL_WIDTH:
-        Partition.NAME_MAX_LEN = MIN_TERMINAL_WIDTH/3 if longestNameLength > MIN_TERMINAL_WIDTH/3 else longestNameLength
-        Partition.PATH_MAX_LEN = MIN_TERMINAL_WIDTH/3 if longestPathLength > MIN_TERMINAL_WIDTH/3 else longestPathLength
+        NAME_MAX_LEN = MIN_TERMINAL_WIDTH//3 if longestNameLength > MIN_TERMINAL_WIDTH//3 else longestNameLength
+        PATH_MAX_LEN = MIN_TERMINAL_WIDTH//3 if longestPathLength > MIN_TERMINAL_WIDTH//3 else longestPathLength
     else:
-        Partition.NAME_MAX_LEN = longestNameLength
-        Partition.PATH_MAX_LEN = longestPathLength
+        NAME_MAX_LEN = longestNameLength
+        PATH_MAX_LEN = longestPathLength
 
     parts = sorted(parts, key=lambda part: (1 - ROOT_RESERVED) - part.usedSize/part.size)
     for part in parts:
