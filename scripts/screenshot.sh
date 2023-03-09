@@ -6,6 +6,7 @@ copy="$2"
 delay=$([[ $3 =~ ^[0-9]+$ ]] && echo $3 || echo 0)      # receive numerical only, if not (or empty) delay = 0
 
 format="png"
+second_format="png"
 name="Screenshot_$(date +%F_%H-%M-%S)"
 dir="/home/mrizaln/Pictures/Screenshots"
 
@@ -14,7 +15,7 @@ filename="${dir}/${name}.${format}"
 sleep $delay
 
 if   [[ "$option" == "whole" && "$copy" == "copy-only" ]]; then
-    import -window root -display :0.0 "${format}:-" | xclip -sel clip -target "image/${format}"
+    import -window root -display :0.0 "${second_format}:-" | xclip -sel clip -target "image/${second_format}"
     notify-send "Screenshot copied to clipboard"
 
 elif [[ "$option" == "whole" && "$copy" == "copy" ]]; then
@@ -27,7 +28,7 @@ elif [[ "$option" == "whole" && "$copy" == "no-copy" ]]; then
     notify-send "Screenshot saved"
 
 elif [[ "$option" == "part" && "$copy" == "copy-only" ]]; then
-    import "${format}:-" | xclip -sel clip -target "image/${format}"
+    import "${second_format}:-" | xclip -sel clip -target "image/${second_format}"
     notify-send "Screenshot copied to clipboard"
 
 elif [[ "$option" == "part" && "$copy" == "copy" ]]; then

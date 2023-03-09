@@ -47,7 +47,8 @@ class Partition:
         remainder_width = (progress * width) % 1
         part_chars = "▂▃▄▅▆"
         part_width = math.floor(remainder_width * len(part_chars))
-        part_char = part_chars[part_width]
+        # part_char = part_chars[part_width]
+        part_char = "▁"
 
         if (width - whole_width - 1) < 0:
             part_char = ""
@@ -123,7 +124,8 @@ def main():
         NAME_MAX_LEN = longestNameLength
         PATH_MAX_LEN = longestPathLength
 
-    parts = sorted(parts, key=lambda part: (1 - ROOT_RESERVED) - part.usedSize/part.size)
+    # parts = sorted(parts, key=lambda part: (1 - ROOT_RESERVED) - part.usedSize/part.size)
+    parts = sorted(parts, key=lambda part: part.name)
     for part in parts:
         part.print(terminalWidth)
 

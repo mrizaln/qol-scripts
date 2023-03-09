@@ -4,7 +4,7 @@ home="/home/mrizaln"
 
 BASH_HIST=$home/.bash_history
 BACKUP_DIR=$home/.bash_history.d
-BACKUP="${BACKUP_DIR}/.bash_history.$(date +%Y%m%d)"
+BACKUP="${BACKUP_DIR}/.bash_history.$(date +%Y%m%d_%H%M)"
 
 backup()
 {
