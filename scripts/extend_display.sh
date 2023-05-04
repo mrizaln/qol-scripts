@@ -1,7 +1,10 @@
 #!/bin/env bash
 
 dimension=$(xdpyinfo | grep dimension | tr -s ' ' | cut -d\  -f3)
-read BUILT_IN_HEIGHT BUILT_IN_WIDTH < <(echo ${dimension/x/ })
+read BUILT_IN_WIDTH BUILT_IN_HEIGHT < <(echo ${dimension/x/ })
+
+MONITOR_MAIN="eDP-1"
+MONITOR_OUTPUT="HDMI-1"
 
 generate_mode ()
 {
@@ -13,10 +16,12 @@ generate_mode ()
     local mode_identifier=${mode[0]//\"/}                                             # remove double quotation marks
     mode=${mode[@]//\"/}
 
-    echo -e "\ngenerating mode: ${mode_identifier} ..."
+    # echo -e "\ngenerating mode: ${mode_identifier} ..."
 
     xrandr --newmode $mode
-    xrandr --addmode HDMI-A-0 "$mode_identifier"
+    xrandr --addmode "$MONITOR_OUTPUT" "$mode_identifier"
+
+    echo "$mode_identifier"
 }
 
 
@@ -27,7 +32,7 @@ activate_mode ()
 
     echo -e "\nactivating mode"
 
-    xrandr --output HDMI-A-0 --mode $mode $position eDP
+    xrandr --output $MONITOR_OUTPUT --mode $mode $position $MONITOR_MAIN
 }
 
 
@@ -37,8 +42,8 @@ delete_mode ()
 
     echo -e "\ndeleting mode: ${mode_identifier} ..."
 
-    xrandr --output HDMI-A-0 --off
-    xrandr --delmode HDMI-A-0 "$mode_identifier"
+    xrandr --output "$MONITOR_OUTPUT" --off
+    xrandr --delmode "$MONITOR_OUTPUT" "$mode_identifier"
     xrandr --rmmode "$mode_identifier"
 }
 
@@ -55,9 +60,9 @@ adb_reverse_connection ()
 
 run_vnc ()
 {
-    local width=$1
-    local height=$2
-    local offset=$3
+    local width="$1"
+    local height="$2"
+    local offset="$3"
 
     echo -e "\nstarting vnc at ${width}x${height}${offset}"
 
@@ -67,14 +72,16 @@ run_vnc ()
 
 run_polybar ()
 {
-    killall -q polybar
+    if pgrep polybar; then
+        killall -q polybar
 
-    # Wait until the processes have been shut down
-    while pgrep -u $UID -x polybar > /dev/null; do sleep 0.5; done
+        # Wait until the processes have been shut down
+        while pgrep -u $UID -x polybar > /dev/null; do sleep 0.5; done
 
-    for m in $(polybar -m | cut -d: -f1); do
-        MONITOR=$m polybar --reload bar 2> /dev/null &
-    done
+        for m in $(polybar -m | cut -d: -f1); do
+            MONITOR=$m polybar --reload bar 2> /dev/null &
+        done
+    fi
 }
 
 
@@ -103,14 +110,24 @@ main ()
                 height=768
                 break
                 ;;
+            '900')
+                width=1600
+                height=900
+                break
+                ;;
             '1080')
                 width=1920
                 height=1080
                 break
                 ;;
+            '1080-')
+                width=2280
+                height=1080
+                break
+                ;;
             *)
                 echo "Invalid resolution.";
-                read -p "resolution(720/768/1080): " res
+                read -p "resolution(720/768/900/1080): " res
                 echo
                 ;;
         esac
@@ -129,12 +146,13 @@ main ()
                 break
                 ;;
             "--left-of")
-                offset="-${width}+0"
+                # offset="-${width}+0"
+                offset="+0+0"
                 break
                 ;;
             "--right-of")
 #                offset="+${width}+0"
-                offset="+BUILT_IN_WIDTH+0"
+                offset="+$BUILT_IN_WIDTH+0"
                 break
                 ;;
             *)
@@ -168,8 +186,9 @@ main ()
 
     local frame_rate=60
 
-    generate_mode $width $height $frame_rate
+    local mode_identifier=$(generate_mode $width $height $frame_rate)
     activate_mode "$mode_identifier" "$pos"
+    echo "$mode_identifier" "$pos"
     sleep 1     # wait for a while
 
     run_polybar                                 # create instances of polybar on each monitor
@@ -207,6 +226,7 @@ main ()
     run_polybar                                 # recreate polybar instance on main monitor (and kill previous instance on deleted mode)
 
     echo "exiting."
+    ~/.fehbg
 
     exit 0
 }

@@ -38,9 +38,13 @@ if [[ "$phrase" == "" ]]; then
 fi
 
 extension="$2"
+context="$3"
+if [[ -z "$context" ]]; then
+    context=3
+fi
 
 while read f; do
-    lines=$(GREP_COLORS="ms=1;31;45" grep --color=always -C3 -iEe "$phrase" "$f")
+    lines=$(GREP_COLORS="ms=1;31;45" grep -I --color=always -C"$context" -iFe "$phrase" "$f")
 
     # if lines is empty, skip
     if [[ "$lines" == "" ]]; then
@@ -60,5 +64,7 @@ while read f; do
     draw_line $(tput cols) "#"          # separator
     echo -e "\n\n\n"
 done < \
-    <(find . -type f | grep -iEe "${extension}$") \
+    <(find $DIR -not -path '*/\.*' -type f \( ! -iname ".*" \) | grep -I -iEe "${extension}$") \
     | less -R
+    # <(find . -type f | grep -iEe "${extension}$") \
+    # | less -R

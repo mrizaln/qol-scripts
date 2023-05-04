@@ -43,7 +43,7 @@ copy_jpeg()
 if [[ "$1" == "" ]]; then
     echo "usage: $0 <file> [--content]"
 elif [[ "$1" == "-" ]]; then
-    echo "$stdin_data" | xclip -sel clip -target "text/plain"
+    echo "$stdin_data" | xclip -sel clip    # -target "text/plain"
 elif [[ ! ("$content" == "") && (("$target" == "text/plain") || ("$target" =~ "text/x-")) ]]; then
     copy_content "$file" "$target"
 elif [[ ("$target" == "image/jpeg") || ("$target" == "image/jpg") ]]; then
