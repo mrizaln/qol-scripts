@@ -1,7 +1,7 @@
 #!/bin/bash
 
 if [[ -p /dev/stdin ]]; then
-    stdin_data=$(cat)        # read stdin
+    stdin_data="$(cat)"        # read stdin
 fi
 
 target=$(file -b --mime-type "$1")

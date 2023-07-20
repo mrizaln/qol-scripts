@@ -2,10 +2,14 @@
 
 case "$1" in
     on)
+        xset s on
+        xset s blank
         xset +dpms
         systemctl --user start xidlehook-suspend.service
         ;;
     off)
+        xset s off
+        xset s noblank
         xset -dpms
         systemctl --user stop xidlehook-suspend.service
         ;;
@@ -19,4 +23,4 @@ esac
 
 xset -q | grep -A2 "DPMS"
 echo -e "\n"
-systemctl --user status xidlehook-suspend.service
+systemctl --no-pager --user status xidlehook-suspend.service

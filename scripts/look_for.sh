@@ -64,7 +64,9 @@ while read f; do
     draw_line $(tput cols) "#"          # separator
     echo -e "\n\n\n"
 done < \
-    <(find $DIR -not -path '*/\.*' -type f \( ! -iname ".*" \) | grep -I -iEe "${extension}$") \
+    <(find $DIR -type f | grep -I -iEe "${extension}$") \
     | less -R
     # <(find . -type f | grep -iEe "${extension}$") \
     # | less -R
+
+    # <(find $DIR -not -path '*/\.*' -type f \( ! -iname ".*" \) | grep -I -iEe "${extension}$") \

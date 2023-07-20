@@ -13,15 +13,15 @@ NAME_MAX_LEN: int = 10
 PATH_MAX_LEN: int = 25
 
 USE_ADB: bool = False
-PRINT_ALL: bool = False
+LOCAL_ONLY: bool = False
 
 try:
-    PRINT_ALL = sys.argv[1] == "all"
+    LOCAL_ONLY = sys.argv[1] == "local"
 except Exception as e:
     pass
 
 try:
-    USE_ADB = sys.argv[1] == "adb" or PRINT_ALL
+    USE_ADB = sys.argv[1] == "adb"
 except Exception as e:
     pass
 
@@ -65,7 +65,7 @@ class Partition:
         whole_width = math.floor(progress * width)
         remainder_width = (progress * width) % 1
         part_chars = "▂▃▄▅▆"
-        part_width = math.floor(remainder_width * len(part_chars))
+        # part_width = math.floor(remainder_width * len(part_chars))
         # part_char = part_chars[part_width]
         part_char = "▁"
 
@@ -218,8 +218,10 @@ def print_storage_info(adb: bool = False):
 
 
 if __name__ == "__main__":
-    if PRINT_ALL:
-        print_storage_info()
-        print_storage_info(USE_ADB)
+    if LOCAL_ONLY:
+        print_storage_info(False)
+    elif USE_ADB:
+        print_storage_info(True)
     else:
-        print_storage_info(USE_ADB)
+        print_storage_info(False)
+        print_storage_info(True)
