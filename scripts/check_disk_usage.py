@@ -5,25 +5,20 @@ import math
 import shutil
 import platform
 import subprocess
+from argparse import ArgumentParser
 
-MIN_TERMINAL_WIDTH: int = 80
-ROOT_RESERVED: float = 0.05  # see: https://askubuntu.com/questions/249387/df-h-used-space-avail-free-space-is-less-than-the-total-size-of-home
+# see: https://askubuntu.com/questions/249387/df-h-used-space-avail-free-space-is-less-than-the-total-size-of-home
 # see: https://unix.stackexchange.com/questions/7950/reserved-space-for-root-on-a-filesystem-why
+ROOT_RESERVED: float = 0.05
+
+MIN_TERMINAL_WIDTH: int = 100
 NAME_MAX_LEN: int = 10
 PATH_MAX_LEN: int = 25
+SHOW_REMAINDER_FLOAT_AS_PARTIAL_BLOCK: bool = True
 
-USE_ADB: bool = False
-LOCAL_ONLY: bool = False
+MAGIC_NUMBER: int = 38  # approximate size of a line without name and path
 
-try:
-    LOCAL_ONLY = sys.argv[1] == "local"
-except Exception as e:
-    pass
-
-try:
-    USE_ADB = sys.argv[1] == "adb"
-except Exception as e:
-    pass
+TIMEOUT_SECONDS: int = 2
 
 
 class Partition:
@@ -46,35 +41,38 @@ class Partition:
 
     # progress is normalized
     def print(self, terminalWidth: int):
+        progress: float
         try:
             progress = self.usedSize / self.size
         except:
-            progress = 0
+            progress = 0.0
 
-        width = terminalWidth - PATH_MAX_LEN - NAME_MAX_LEN - 35
+        width = max(0, terminalWidth - PATH_MAX_LEN - NAME_MAX_LEN - MAGIC_NUMBER)
 
-        free = self.size - self.usedSize
-        free = f"{formatBytes(free):>6} free"
+        free = f"{formatBytes(self.size - self.usedSize):>6} free"
 
         size = f"{formatBytes(self.size):>6}"
 
-        usedPercentage = f"{round(progress*100, 1):>4}"
+        usedPercentage = f"{round(progress*100, 1):>5}"
 
         # 0 <= progress <= 1
         progress = min(1, max(0, progress))
-        whole_width = math.floor(progress * width)
-        remainder_width = (progress * width) % 1
-        part_chars = "▂▃▄▅▆"
-        # part_width = math.floor(remainder_width * len(part_chars))
-        # part_char = part_chars[part_width]
+        whole_width = max(0, math.floor(progress * width))
+
         part_char = "▁"
+        if SHOW_REMAINDER_FLOAT_AS_PARTIAL_BLOCK:
+            remainder_width = max(0, math.fmod(progress * width, 1))
+            part_chars = "▂▃▄▅▆"
+            part_width = math.floor(remainder_width * len(part_chars))
+            part_char = part_chars[part_width]
 
         if (width - whole_width - 1) < 0:
             part_char = ""
-        bar = (
+
+        bar: str | None = (
             "▇" * whole_width + part_char + "▁" * (width - whole_width - 1)
             if terminalWidth >= MIN_TERMINAL_WIDTH
-            else "-"
+            else None
         )
 
         name: str = (
@@ -87,7 +85,11 @@ class Partition:
             if len(self.path) <= PATH_MAX_LEN
             else self.path[: PATH_MAX_LEN - 1] + "…"
         )
-        line = f"{name:<{NAME_MAX_LEN}}  {path:<{PATH_MAX_LEN}}  {usedPercentage}% of {size} {bar} {free}"
+        size_combined: str = (
+            f"{size} {bar} [{free}]" if (bar != None) else f"{size} [{free}]"
+        )
+        pad: str = "  "
+        line = f"{pad}{name:<{NAME_MAX_LEN}}  {path:<{PATH_MAX_LEN}} [{usedPercentage}%] of {size_combined}"
         print(line)
 
 
@@ -139,23 +141,20 @@ def print_parts(parts: list[Partition], longestNameLength: int, longestPathLengt
     global PATH_MAX_LEN
 
     terminalWidth, _ = shutil.get_terminal_size((80, 20))
+    availableWidth = terminalWidth - MAGIC_NUMBER
 
     if terminalWidth <= MIN_TERMINAL_WIDTH:
-        NAME_MAX_LEN = (
-            MIN_TERMINAL_WIDTH // 3
-            if longestNameLength > MIN_TERMINAL_WIDTH // 3
-            else longestNameLength
+        NAME_MAX_LEN = max(
+            MAGIC_NUMBER // 2, min(availableWidth // 2, longestNameLength)
         )
-        PATH_MAX_LEN = (
-            MIN_TERMINAL_WIDTH // 3
-            if longestPathLength > MIN_TERMINAL_WIDTH // 3
-            else longestPathLength
+        PATH_MAX_LEN = max(
+            MAGIC_NUMBER // 2, min(availableWidth // 2, longestPathLength)
         )
     else:
         NAME_MAX_LEN = longestNameLength
         PATH_MAX_LEN = longestPathLength
 
-    # parts = sorted(parts, key=lambda part: (1 - ROOT_RESERVED) - part.usedSize/part.size)
+    # parts = sorted(parts, key=lambda part: (1 - ROOT_one, env=None, universal_newlinesRESERVED) - part.usedSize/part.size)
     parts = sorted(parts, key=lambda part: part.name)
     for part in parts:
         part.print(terminalWidth)
@@ -174,7 +173,7 @@ def print_storage_info(adb: bool = False):
         ROOT_RESERVED = 0
 
         devices_adb = adb_devices()
-        if (len(devices_adb) == 0 or (len(devices_adb) == 1 and devices_adb[0] == '')):
+        if len(devices_adb) == 0 or (len(devices_adb) == 1 and devices_adb[0] == ""):
             print("No Android device connected")
             return
 
@@ -186,11 +185,34 @@ def print_storage_info(adb: bool = False):
 
     lines: list[str] = []
     for device, command in zip(device_names, commands):
-        run = subprocess.run(command, shell=True, stdout=subprocess.PIPE)
+        print(f"Storage information for {{{ device }}}:")
 
-        result = run.stdout.decode("utf-8").rstrip()
+        try:
+            run = subprocess.run(
+                command, shell=True, capture_output=True, timeout=TIMEOUT_SECONDS
+            )
+        except subprocess.TimeoutExpired as e:
+            print(f"[Error: timeout of {e.timeout}s is reached]\n")
+            continue
+        except Exception as e:
+            print(f"[Error: {e}]\n")
+            continue
+
+        result: str = ""
+        if run.returncode != 0:
+            print(f"[Error: command exited with return code {run.returncode}]\n")
+            continue
+        else:
+            result = run.stdout.decode("utf-8").rstrip()
 
         lines = result.split("\n")
+        if len(lines) == 0:
+            print(f"[Error: empty output]\n")
+            continue
+        elif len(lines[0].split()) != 6:
+            # 'df' command returns 6 columns of data per line
+            print(f"[Error: output is not correct (column size: {len(lines[0])})]\n")
+            continue
 
         # 0 5 1 4
         parts = []
@@ -212,16 +234,32 @@ def print_storage_info(adb: bool = False):
                 else longestPathLength
             )
 
-        print(f"### Storage information for: {device}")
         print_parts(parts, longestNameLength, longestPathLength)
         print()
 
 
+def main():
+    arg_parser = ArgumentParser()
+
+    arg_parser.add_argument(
+        "mode",
+        help="query mode",
+        choices=["local", "adb", "both"],
+        default="both",
+        nargs="?",
+    )
+
+    args = arg_parser.parse_args()
+
+    match args.mode:
+        case "local":
+            print_storage_info(False)
+        case "adb":
+            print_storage_info(True)
+        case "both":
+            print_storage_info(False)
+            print_storage_info(True)
+
+
 if __name__ == "__main__":
-    if LOCAL_ONLY:
-        print_storage_info(False)
-    elif USE_ADB:
-        print_storage_info(True)
-    else:
-        print_storage_info(False)
-        print_storage_info(True)
+    main()
