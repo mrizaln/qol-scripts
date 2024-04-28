@@ -10,6 +10,8 @@ import subprocess
 
 CMAKE_VERSION: str = "3.16"
 BOOTSTRAP_COMMAND = "conan install . -of build/debug/ --build missing -s build_type=Debug \
+        && mkdir -p build/debug/.cmake/api/v1/query \
+        && touch build/debug/.cmake/api/v1/query/codemodel-v2 \
         && cmake --preset conan-debug \
         && ln -s build/debug/compile_commands.json . \
         && cmake --build --preset conan-debug \
