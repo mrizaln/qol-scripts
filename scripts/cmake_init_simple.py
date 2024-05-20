@@ -1,21 +1,21 @@
 #!/usr/bin/env python3
 
+from contextlib import chdir
 from argparse import ArgumentParser
 from dataclasses import dataclass
 from pathlib import Path
 from textwrap import dedent
 from sys import stderr
-import os
 import subprocess
 
 CMAKE_VERSION: str = "3.16"
-BOOTSTRAP_COMMAND = "conan install . -of build/debug/ --build missing -s build_type=Debug \
-        && mkdir -p build/debug/.cmake/api/v1/query \
-        && touch build/debug/.cmake/api/v1/query/codemodel-v2 \
+BOOTSTRAP_BINARY_DIR = "build/debug"
+BOOTSTRAP_COMMAND = f"conan install . -of {BOOTSTRAP_BINARY_DIR} --build missing -s build_type=Debug \
+        && mkdir -p {BOOTSTRAP_BINARY_DIR}/.cmake/api/v1/query \
+        && touch {BOOTSTRAP_BINARY_DIR}/.cmake/api/v1/query/codemodel-v2 \
         && cmake --preset conan-debug \
-        && ln -s build/debug/compile_commands.json . \
-        && cmake --build --preset conan-debug \
-        && ./build/debug/main"
+        && ln -s {BOOTSTRAP_BINARY_DIR}/compile_commands.json . \
+        && cmake --build --preset conan-debug"
 
 
 @dataclass
@@ -79,14 +79,14 @@ class Template:
             set(CMAKE_CXX_EXTENSIONS OFF)
             # set(CMAKE_COLOR_DIAGNOSTICS ON) # You might want to enable this (CMake 3.24+)
 
-            find_package(fmt CONFIG REQUIRED)
+            find_package(fmt REQUIRED)
 
             # add_subdirectory(lib)
 
             add_executable({main} source/{main}.cpp)
             target_include_directories({main} PRIVATE source)
             target_link_libraries({main} PRIVATE fmt::fmt)
-            target_compile_options({main} PRIVATE -Wall -Wextra -Wconversion)
+            target_compile_options({main} PRIVATE -Wall -Wextra -Wconversion -Wswitch-enum)
 
             # sanitizer
             target_compile_options({main} PRIVATE -fsanitize=address,leak,undefined)
@@ -156,7 +156,7 @@ class Template:
     @staticmethod
     def gitignore() -> str:
         content = f"""
-            build/
+            **/build/
             .cache/
         """
         return Template.__clean(content)
@@ -263,7 +263,13 @@ def configure_cpp_template(config: Config) -> None:
         notify_skip_file_exist(cpp.relative_to(config.dir))
 
 
-def configure_gitignore(config: Config):
+def configure_git(config: Config):
+    try:
+        with chdir(config.dir):
+            subprocess.run(["git", "init"]).check_returncode()
+    except subprocess.CalledProcessError as e:
+        eprint(f"Failed to initialize git: {e}")
+
     gitignore = config.dir / ".gitignore"
     if not gitignore.exists():
         text = Template.gitignore()
@@ -272,7 +278,7 @@ def configure_gitignore(config: Config):
         notify_skip_file_exist(gitignore.relative_to(config.dir))
 
 
-def configure_project(config: Config) -> bool:
+def configure_project(config: Config, init_git: bool) -> bool:
     # check if CMakeLists.txt already exists and exit
     if (config.dir / "CMakeLists.txt").exists():
         return False
@@ -281,9 +287,24 @@ def configure_project(config: Config) -> bool:
     configure_cmake(config, CMAKE_VERSION)
     configure_conanfile(config)
     configure_cpp_template(config)
-    configure_gitignore(config)
+
+    if init_git:
+        configure_git(config)
 
     return True
+
+
+def bootstrap_project(config: Config) -> Path | None:
+    command = " ".join(BOOTSTRAP_COMMAND.split())  # remove repeated spaces
+    completed_process = subprocess.run(command, shell=True)
+    try:
+        completed_process.check_returncode()
+    except subprocess.CalledProcessError as e:
+        eprint(f"Failed to bootstrap: {e}")
+        return None
+
+    mainfile = "main" if config.main else config.name
+    return config.dir / BOOTSTRAP_BINARY_DIR / mainfile
 
 
 def main() -> int:
@@ -293,7 +314,8 @@ def main() -> int:
     a("dir", help="Directory to initialize")
     a("--name", help="Project name, defaults to directory name", nargs="?")
     a("--main", help="Use 'main' as the main file name", action="store_true")
-    a("--bootstrap", help="Immediately bootstrap the project", action="store_true")
+    a("--git", help="Initialize git repository", action="store_true")
+    a("--no-bootstrap", help="Don't bootstrap the project", action="store_true")
 
     a("--conan-only", help="Generate conanfile.py only", action="store_true")
     a("--cmake-only", help="Generate CMakeLists.txt only", action="store_true")
@@ -306,27 +328,36 @@ def main() -> int:
     config = Config(dir, name, args.main)
 
     should_configure_project = not args.conan_only and not args.cmake_only
-    should_bootstrap = args.bootstrap
+    should_bootstrap = not args.no_bootstrap
 
-    if should_configure_project:
-        success = configure_project(config)
-        if success:
-            print(f"Project '{config.name}' initialized in '{config.dir}'")
-            if should_bootstrap:
-                os.chdir(dir)
-                print("Bootstrapping project...")
-                subprocess.run(BOOTSTRAP_COMMAND, shell=True)
-            return 0
-        else:
-            eprint(f"Project already initialized in '{config.dir}'")
-            return 1
-    else:
+    if not should_configure_project:
         if args.conan_only:
             configure_conanfile(config)
         if args.cmake_only:
             configure_cmake(config, CMAKE_VERSION, skip_lib=True)
         print(f"Generation success")
         return 0
+
+    success = configure_project(config, args.git)
+    if not success:
+        eprint(f"Project already initialized in '{config.dir}'")
+        return 1
+
+    print(f"Project '{config.name}' initialized in '{config.dir}'")
+
+    if not should_bootstrap:
+        return 0
+
+    with chdir(dir):
+        print("Bootstrapping project...")
+        binary = bootstrap_project(config)
+        if binary is None:
+            print("Bootstrapping failed, see previous error")
+        else:
+            print("\nBootstrapping completed.\n")
+            subprocess.run(binary)
+
+    return 0
 
 
 if __name__ == "__main__":
