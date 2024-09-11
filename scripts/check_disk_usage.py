@@ -1,40 +1,54 @@
 #!/usr/bin/env python3
 
-import sys
 import math
 import shutil
 import platform
 import subprocess
 from argparse import ArgumentParser
+from enum import Enum
+from pathlib import Path
 
 # see: https://askubuntu.com/questions/249387/df-h-used-space-avail-free-space-is-less-than-the-total-size-of-home
 # see: https://unix.stackexchange.com/questions/7950/reserved-space-for-root-on-a-filesystem-why
-ROOT_RESERVED: float = 0.05
+ROOT_RESERVED: float = 0.00 # 0.05
 
 MIN_TERMINAL_WIDTH: int = 100
 NAME_MAX_LEN: int = 10
 PATH_MAX_LEN: int = 25
 SHOW_REMAINDER_FLOAT_AS_PARTIAL_BLOCK: bool = True
 
-MAGIC_NUMBER: int = 38  # approximate size of a line without name and path
+LINE_SIZE_APPROX: int = 38  # approximate size of a line without name and path
 
 TIMEOUT_SECONDS: int = 2
+
+
+class DeviceType(Enum):
+    LOCAL = 1
+    ADB = 2
 
 
 class Partition:
     # size and usedSize is in bytes
     def __init__(
-        self, name: str = "", path: str = "", size: int = 0, usedSize: int = 0
+        self, name: str = "", path: Path = Path(), size: int = 0, usedSize: int = 0
     ) -> None:
         self.name: str = name
-        self.path: str = path
+        self.path: Path = path
         self.size: int = size
-        self.usedSize: int = usedSize + int(ROOT_RESERVED * self.size)
+
+        if path == "/" or path == "/home":
+            self.usedSize: int = usedSize + int(ROOT_RESERVED * self.size)
+        else:
+            self.usedSize: int = usedSize
 
     # size is in kbytes
     @classmethod
     def from_percentage(
-        cls, name: str = "", path: str = "", size: int = 0, usedPercentage: float = 0
+        cls,
+        name: str = "",
+        path: Path = Path(),
+        size: int = 0,
+        usedPercentage: float = 0,
     ) -> None:
         usedSize: int = int(usedPercentage * size / 100)
         cls(name, path, size, usedSize)
@@ -47,7 +61,7 @@ class Partition:
         except:
             progress = 0.0
 
-        width = max(0, terminalWidth - PATH_MAX_LEN - NAME_MAX_LEN - MAGIC_NUMBER)
+        width = max(0, terminalWidth - PATH_MAX_LEN - NAME_MAX_LEN - LINE_SIZE_APPROX)
 
         free = f"{formatBytes(self.size - self.usedSize):>6} free"
 
@@ -80,10 +94,11 @@ class Partition:
             if len(self.name) <= NAME_MAX_LEN
             else self.name[: NAME_MAX_LEN - 1] + "…"
         )
+        path_str = str(self.path)
         path: str = (
-            self.path
-            if len(self.path) <= PATH_MAX_LEN
-            else self.path[: PATH_MAX_LEN - 1] + "…"
+            path_str
+            if len(path_str) <= PATH_MAX_LEN
+            else path_str[: PATH_MAX_LEN - 1] + "…"
         )
         size_combined: str = (
             f"{size} {bar} [{free}]" if (bar != None) else f"{size} [{free}]"
@@ -117,12 +132,6 @@ def formatBytes(kBytes: float) -> str:
     return str(kBytes) + orderNames[order]
 
 
-def test():
-    part = Partition("/dev/sda6", "/home", 123987, 123000)
-    terminalWidth, _ = shutil.get_terminal_size((80, 20))
-    part.print(terminalWidth)
-
-
 def adb_devices():
     devices = (
         subprocess.run(
@@ -141,14 +150,14 @@ def print_parts(parts: list[Partition], longestNameLength: int, longestPathLengt
     global PATH_MAX_LEN
 
     terminalWidth, _ = shutil.get_terminal_size((80, 20))
-    availableWidth = terminalWidth - MAGIC_NUMBER
+    availableWidth = terminalWidth - LINE_SIZE_APPROX
 
     if terminalWidth <= MIN_TERMINAL_WIDTH:
         NAME_MAX_LEN = max(
-            MAGIC_NUMBER // 2, min(availableWidth // 2, longestNameLength)
+            LINE_SIZE_APPROX // 2, min(availableWidth // 2, longestNameLength)
         )
         PATH_MAX_LEN = max(
-            MAGIC_NUMBER // 2, min(availableWidth // 2, longestPathLength)
+            LINE_SIZE_APPROX // 2, min(availableWidth // 2, longestPathLength)
         )
     else:
         NAME_MAX_LEN = longestNameLength
@@ -160,18 +169,14 @@ def print_parts(parts: list[Partition], longestNameLength: int, longestPathLengt
         part.print(terminalWidth)
 
 
-def print_storage_info(adb: bool = False):
+def print_storage_info(device_type: DeviceType):
     # get list of filesystems
     commands: list[str] = []
     device_names: list[str] = []
-    if not adb:
+    if device_type == DeviceType.LOCAL:
         commands.append("df | tail -n+2 | sort -k1")
         device_names.append(platform.node())
-
-    else:
-        global ROOT_RESERVED
-        ROOT_RESERVED = 0
-
+    elif device_type == DeviceType.ADB:
         devices_adb = adb_devices()
         if len(devices_adb) == 0 or (len(devices_adb) == 1 and devices_adb[0] == ""):
             print("No Android device connected")
@@ -183,9 +188,11 @@ def print_storage_info(adb: bool = False):
             )
             device_names.append(f"{device} (adb device)")
 
+    title_string = lambda s: f"\033[1;47;30mStorage information for [{s}]:\033[0m"
+
     lines: list[str] = []
     for device, command in zip(device_names, commands):
-        print(f"Storage information for {{{ device }}}:")
+        print(title_string(device))
 
         try:
             run = subprocess.run(
@@ -214,23 +221,25 @@ def print_storage_info(adb: bool = False):
             print(f"[Error: output is not correct (column size: {len(lines[0])})]\n")
             continue
 
-        # 0 5 1 4
         parts = []
         longestNameLength = 0
         longestPathLength = 0
         for line in lines:
             line = line.split()
-            #                name     path     size          used size
-            part = Partition(line[0], line[5], int(line[1]), int(line[2]))
+            # 0: name | 1: size | 2: used | 3: avail | 4: percentage | 5: mount
+            #                name     path           size          used size
+            part = Partition(line[0], Path(line[5]), int(line[1]), int(line[1]) - int(line[3]))
             parts.append(part)
+
             longestNameLength = (
                 len(part.name)
                 if len(part.name) > longestNameLength
                 else longestNameLength
             )
+
             longestPathLength = (
-                len(part.path)
-                if len(part.path) > longestPathLength
+                len(str(part.path))
+                if len(str(part.path)) > longestPathLength
                 else longestPathLength
             )
 
@@ -253,12 +262,12 @@ def main():
 
     match args.mode:
         case "local":
-            print_storage_info(False)
+            print_storage_info(DeviceType.LOCAL)
         case "adb":
-            print_storage_info(True)
+            print_storage_info(DeviceType.ADB)
         case "both":
-            print_storage_info(False)
-            print_storage_info(True)
+            print_storage_info(DeviceType.LOCAL)
+            print_storage_info(DeviceType.ADB)
 
 
 if __name__ == "__main__":
