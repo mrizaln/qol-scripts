@@ -10,7 +10,7 @@ from pathlib import Path
 
 # see: https://askubuntu.com/questions/249387/df-h-used-space-avail-free-space-is-less-than-the-total-size-of-home
 # see: https://unix.stackexchange.com/questions/7950/reserved-space-for-root-on-a-filesystem-why
-ROOT_RESERVED: float = 0.00 # 0.05
+ROOT_RESERVED: float = 0.00  # 0.05
 
 MIN_TERMINAL_WIDTH: int = 100
 NAME_MAX_LEN: int = 10
@@ -20,6 +20,7 @@ SHOW_REMAINDER_FLOAT_AS_PARTIAL_BLOCK: bool = True
 LINE_SIZE_APPROX: int = 38  # approximate size of a line without name and path
 
 TIMEOUT_SECONDS: int = 2
+SKIP_EXTRA_FS: bool = True
 
 
 class DeviceType(Enum):
@@ -101,11 +102,19 @@ class Partition:
             else path_str[: PATH_MAX_LEN - 1] + "…"
         )
         size_combined: str = (
-            f"{size} {bar} [{free}]" if (bar != None) else f"{size} [{free}]"
+            f"{size} {bar} [{free}]" if (bar is not None) else f"{size} [{free}]"
         )
         pad: str = "  "
         line = f"{pad}{name:<{NAME_MAX_LEN}}  {path:<{PATH_MAX_LEN}} [{usedPercentage}%] of {size_combined}"
         print(line)
+
+
+def isExtraFs(string: str) -> bool:
+    fsNames = ["tmpfs", "efivarfs", "overlay"]
+    for fs in fsNames:
+        if string.find(fs) != -1:
+            return True
+    return False
 
 
 def toBytes(size: str):
@@ -188,7 +197,8 @@ def print_storage_info(device_type: DeviceType):
             )
             device_names.append(f"{device} (adb device)")
 
-    title_string = lambda s: f"\033[1;47;30mStorage information for [{s}]:\033[0m"
+    def title_string(s):
+        return f"\x1b[1;47;30mStorage information for [{s}]:\x1b[0m"
 
     lines: list[str] = []
     for device, command in zip(device_names, commands):
@@ -227,8 +237,16 @@ def print_storage_info(device_type: DeviceType):
         for line in lines:
             line = line.split()
             # 0: name | 1: size | 2: used | 3: avail | 4: percentage | 5: mount
-            #                name     path           size          used size
-            part = Partition(line[0], Path(line[5]), int(line[1]), int(line[1]) - int(line[3]))
+            part = Partition(
+                name=line[0],
+                path=Path(line[5]),
+                size=int(line[1]),
+                usedSize=int(line[1]) - int(line[3]),
+            )
+
+            if SKIP_EXTRA_FS and isExtraFs(part.name):
+                continue
+
             parts.append(part)
 
             longestNameLength = (
